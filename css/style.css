@@ -1,0 +1,32 @@
+/* FriendZone - Base Styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f2f5;
+    color: #1c1e21;
+}
+
+.navbar {
+    background: #4a90d9;
+    color: white;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar .logo { font-size: 1.5rem; }
+
+.navbar nav a {
+    color: white;
+    text-decoration: none;
+    margin-left: 16px;
+    font-weight: 500;
+}
+
+#main-content {
+    max-width: 680px;
+    margin: 24px auto;
+    padding: 0 16px;
+}
