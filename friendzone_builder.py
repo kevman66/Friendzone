@@ -4093,7 +4093,7 @@ class FriendZoneBuilder:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("FriendZone Auto-Builder")
-        self.root.geometry("620x480")
+        self.root.geometry("620x530")
         self.root.resizable(False, False)
         self.root.configure(bg="#1e1e2e")
 
@@ -4145,18 +4145,33 @@ class FriendZoneBuilder:
         self.progress.pack(pady=(0, 8))
         self.progress["value"] = min(read_step(), len(STEPS))
 
-        # Interval selector
-        interval_frame = tk.Frame(body, bg="#1e1e2e")
-        interval_frame.pack(fill="x", pady=(0, 8))
-        tk.Label(interval_frame, text="Interval (minutes):", fg="#aaa",
+        # Settings row 1: Interval
+        row1 = tk.Frame(body, bg="#1e1e2e")
+        row1.pack(fill="x", pady=(0, 6))
+        tk.Label(row1, text="Interval (minutes):", fg="#aaa",
                  bg="#1e1e2e", font=("Segoe UI", 11)).pack(side="left")
-        self.interval_var = tk.StringVar(value="60")
-        interval_entry = tk.Entry(
-            interval_frame, textvariable=self.interval_var, width=6,
+        self.interval_var = tk.StringVar(value="5")
+        tk.Entry(
+            row1, textvariable=self.interval_var, width=5,
             font=("Segoe UI", 11), bg="#2a2a3e", fg="white",
             insertbackground="white", relief="flat",
-        )
-        interval_entry.pack(side="left", padx=(6, 0))
+        ).pack(side="left", padx=(6, 0))
+        tk.Label(row1, text="between commits", fg="#666",
+                 bg="#1e1e2e", font=("Segoe UI", 9)).pack(side="left", padx=(8, 0))
+
+        # Settings row 2: Max commits
+        row2 = tk.Frame(body, bg="#1e1e2e")
+        row2.pack(fill="x", pady=(0, 6))
+        tk.Label(row2, text="Max commits:", fg="#aaa",
+                 bg="#1e1e2e", font=("Segoe UI", 11)).pack(side="left")
+        self.max_commits_var = tk.StringVar(value="5")
+        tk.Entry(
+            row2, textvariable=self.max_commits_var, width=5,
+            font=("Segoe UI", 11), bg="#2a2a3e", fg="white",
+            insertbackground="white", relief="flat",
+        ).pack(side="left", padx=(6, 0))
+        tk.Label(row2, text="then auto-stop  (0 = unlimited)", fg="#666",
+                 bg="#1e1e2e", font=("Segoe UI", 9)).pack(side="left", padx=(8, 0))
 
         # Buttons
         btn_frame = tk.Frame(body, bg="#1e1e2e")
@@ -4216,15 +4231,31 @@ class FriendZoneBuilder:
             messagebox.showerror("Error", "Interval must be a positive integer (minutes).")
             return
 
+        try:
+            max_commits = int(self.max_commits_var.get())
+            if max_commits < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "Max commits must be 0 or a positive integer.")
+            return
+
         self.running = True
         self.stop_event.clear()
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
-        self.status_var.set("Running")
+        if max_commits > 0:
+            self.status_var.set(f"Running (0/{max_commits} commits)")
+        else:
+            self.status_var.set("Running (unlimited)")
         self.status_label.configure(fg="#27ae60")
-        self._log("Auto-builder started!")
+        self._log(f"Started! {max_commits} commits, {interval_min} min apart." if max_commits > 0
+                  else f"Started! Unlimited commits, {interval_min} min apart.")
 
-        self.thread = threading.Thread(target=self._run_loop, args=(interval_min * 60,), daemon=True)
+        self.thread = threading.Thread(
+            target=self._run_loop,
+            args=(interval_min * 60, max_commits),
+            daemon=True,
+        )
         self.thread.start()
 
     def stop(self):
@@ -4237,7 +4268,9 @@ class FriendZoneBuilder:
         self._log("Stopped by user.")
 
     # ── Main loop (runs in background thread) ─────────────────────────
-    def _run_loop(self, interval_secs):
+    def _run_loop(self, interval_secs, max_commits=0):
+        commits_done = 0
+
         while not self.stop_event.is_set():
             step_num = read_step()
             self.root.after(0, lambda s=step_num: self.step_var.set(f"{s} / {len(STEPS)}+"))
@@ -4245,7 +4278,7 @@ class FriendZoneBuilder:
 
             # Execute the step
             if step_num < len(STEPS):
-                self.root.after(0, lambda: self._log(f"Running step {step_num}..."))
+                self.root.after(0, lambda s=step_num: self._log(f"Running step {s}..."))
                 msg = STEPS[step_num]()
             else:
                 # Rotating maintenance updates that write real code
@@ -4253,7 +4286,6 @@ class FriendZoneBuilder:
                 version = step_num - len(STEPS) + 1
                 cycle = (version - 1) % len(MAINTENANCE_CYCLES)
                 msg = MAINTENANCE_CYCLES[cycle](version)
-                # Also bump version in package.json
                 pkg = os.path.join(REPO_DIR, "package.json")
                 if os.path.exists(pkg):
                     with open(pkg, "r", encoding="utf-8") as f:
@@ -4266,6 +4298,7 @@ class FriendZoneBuilder:
             success = git_commit(msg)
             new_step = step_num + 1
             write_step(new_step)
+            commits_done += 1
 
             if success:
                 self.root.after(0, lambda m=msg: self._log(f"Committed: {m}"))
@@ -4275,18 +4308,35 @@ class FriendZoneBuilder:
             self.root.after(0, lambda s=new_step: self.step_var.set(f"{s} / {len(STEPS)}+"))
             self.root.after(0, lambda s=new_step: self.progress.configure(value=min(s, len(STEPS))))
 
-            # Wait for next interval (check stop_event every second)
-            if step_num < len(STEPS):
-                remaining = f"feature step"
-            else:
-                remaining = f"maintenance"
-            self.root.after(0, lambda r=remaining, i=interval_secs:
-                            self._log(f"Next {r} commit in {i // 60} min. Waiting..."))
+            # Update status with commit count
+            if max_commits > 0:
+                self.root.after(0, lambda c=commits_done, m=max_commits:
+                                self.status_var.set(f"Running ({c}/{m} commits)"))
+
+            # Check if we've hit the max
+            if max_commits > 0 and commits_done >= max_commits:
+                self.root.after(0, lambda c=commits_done:
+                                self._log(f"Done! {c} commits completed. Auto-stopped."))
+                self.root.after(0, self._reset_ui)
+                return
+
+            # Wait for next interval
+            remaining_commits = f" ({commits_done}/{max_commits})" if max_commits > 0 else ""
+            self.root.after(0, lambda r=remaining_commits, i=interval_secs:
+                            self._log(f"Next commit{r} in {i // 60} min. Waiting..."))
 
             for _ in range(interval_secs):
                 if self.stop_event.is_set():
                     return
                 time.sleep(1)
+
+    def _reset_ui(self):
+        self.running = False
+        self.stop_event.set()
+        self.start_btn.configure(state="normal")
+        self.stop_btn.configure(state="disabled")
+        self.status_var.set("Stopped")
+        self.status_label.configure(fg="#e74c3c")
 
     # ── Cleanup ────────────────────────────────────────────────────────
     def on_close(self):

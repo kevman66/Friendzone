@@ -30,3 +30,23 @@ body {
     margin: 24px auto;
     padding: 0 16px;
 }
+
+/* Auth Forms */
+.auth-container {
+    max-width: 400px;
+    margin: 60px auto;
+    padding: 32px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.auth-container h2 { margin-bottom: 20px; text-align: center; }
+.auth-container input {
+    width: 100%; padding: 12px; margin-bottom: 12px;
+    border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
+}
+.btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-primary { background: #4a90d9; color: white; width: 100%; padding: 12px; }
+.btn-primary:hover { background: #3a7bc8; }
+.auth-switch { text-align: center; margin-top: 16px; color: #666; }
+.auth-switch a { color: #4a90d9; text-decoration: none; }
